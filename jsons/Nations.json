@@ -1,0 +1,36 @@
+{
+  "name": "Ottoman Empire",
+  "leaderName": "Suleiman",
+  "adjective": ["Ottoman"],
+  "startBias": ["Hill", "Coast"],
+  "preferredVictoryType": "Domination",
+  "personality": "Expansionist",
+  
+  "startIntroPart1": "Hail, Sultan Suleiman the Magnificent! The Ottoman Empire, a bridge between East and West, stretches its mighty arms across continents. With unmatched military discipline, grand architecture, and a legacy of conquest, your Janissaries and Sipahis have forged an empire that commands respect and fear.",
+  "startIntroPart2": "Will you expand your domains further, Sultan? Will the crescent banner flutter over new horizons?",
+  
+  "declaringWar": "The sword of Osman demands your submission.",
+  "attacked": "You dare challenge the Sublime Porte?",
+  "defeated": "The empire falters... but our legacy endures.",
+  "introduction": "Greetings from the Ottoman Empire.",
+  "neutralHello": "State your business.",
+  "hateHello": "You test our patience.",
+  "tradeRequest": "The Ottoman markets are open for negotiation.",
+  "outerColor": [0, 100, 0],   // Koyu yeşil
+  "innerColor": [255, 215, 0], // Altın rengi
+  "favoredReligion": "Islam",
+  "uniqueName": "Sublime Porte",
+  "uniques": [
+    "Capital starts with [+100 HP] and [+10 Strength]",
+    "Capital has a [-2 Gold] maintenance cost",
+    "Units in the capital heal [+50]% faster",
+    "Units attacking from a Fort or Citadel deal [+20]% damage",
+    "Cannot produce [Great Generals]",
+    "Can produce [Pasha] units"
+  ],
+  "cities": [
+    "Istanbul", "Edirne", "Bursa", "Ankara", "Izmir", "Konya", "Trabzon",
+    "Antalya", "Sofia", "Belgrade", "Baghdad", "Cairo", "Damascus", "Mecca"
+  ],
+  "spyNames": ["Berat", "Selim", "Orhan", "Fatima", "Mehmed", "Leyla", "Kemal" "Aisha",]
+}

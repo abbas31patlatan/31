@@ -1,0 +1,28 @@
+[
+  {
+    "name": "[Timarli Sipahi] ability",
+    "uniques": [
+      "[+2] Movement for [2] turns after killing an enemy unit",
+      "Takes [-15]% less damage from ranged attacks"
+    ]
+  },
+  {
+    "name": "[Homeland Devotion] ability",
+    "uniqueTo": "Ottoman Empire",
+    "uniques": [
+      "Heals [+50]% faster in friendly territory"
+    ]
+  },
+  {
+    "name": "[Master of Conquest] ability",
+    "uniques": [
+      "Gains [+15]% Combat Strength when attacking cities"
+    ]
+  },
+  {
+    "name": "[Finishing Blow] ability",
+    "uniques": [
+      "Gains [+30]% Combat Strength against wounded units"
+    ]
+  }
+]
