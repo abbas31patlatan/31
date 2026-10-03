@@ -1,4 +1,4 @@
-name: Social Empires audit tool tests
+name: Social Empires gateway and source checks
 
 on:
   push:
@@ -22,13 +22,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Run source audit unit tests
+      - name: Install gateway test dependency
+        run: python -m pip install "Flask>=3.1,<4"
+      - name: Run account and audit unit tests
         run: python -m unittest discover -s social-empires/tests -v
       - name: Download fixed upstream source snapshot (text only)
         run: |
           mkdir -p upstream-source/templates
           SHA=f642e0bae5a341f48e73b58f2e6d33a8436992c1
-          for file in server.py sessions.py templates/play.html templates/ruffle.html requirements.txt; do
+          for file in server.py sessions.py command.py templates/play.html templates/ruffle.html requirements.txt; do
             curl --fail --silent --show-error --location --retry 3 \
               --output "upstream-source/$file" \
               "https://raw.githubusercontent.com/AcidCaos/socialemperors/$SHA/$file"
@@ -40,6 +42,23 @@ jobs:
             --output upstream-report.json
           python -m json.tool upstream-report.json > /dev/null
           python -c 'import json; r=json.load(open("upstream-report.json")); print("Routes:", r["route_count"]); print("Indicators:", r["indicators"]); assert r["route_count"] > 0; assert not r["missing_required_files"]'
+      - name: Verify upstream integration patch and syntax
+        run: |
+          python social-empires/tools/patch_upstream.py --path upstream-source
+          python -m compileall -q upstream-source
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("upstream-source")
+          server = (p / "server.py").read_text()
+          assert "install_revival(app, new_village)" in server
+          assert "app.secret_key = 'SECRET_KEY'" not in server
+          assert "SERVERIP=host" not in server
+          for template in ("play.html", "ruffle.html"):
+              t = (p / "templates" / template).read_text()
+              assert "http://{{SERVERIP}}:5050" not in t
+              assert 'action="/signout"' in t
+          print("Pinned upstream integration: PASS")
+          PY
       - name: Upload audit report
         uses: actions/upload-artifact@v4
         with:
