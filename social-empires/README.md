@@ -47,3 +47,24 @@ Unit tests (do not need game assets):
 Upstream's source is marked GPL-3.0; preserve the GPL obligations for copied or modified covered source. Its game artwork, SWF files, third-party Flash runtimes and trademarks may have distinct rights. Do not republish proprietary game assets without checking authorization. Never directly expose the alpha server to the public Internet.
 
 See [initial audit](docs/INITIAL_AUDIT.md).
+## Current milestone: guarded local multiplayer prototype
+
+Implemented and tested in GitHub Actions against pinned upstream source:
+
+- Username/password login with a per-account village and signed legacy game key.
+- Account isolation, redacted neighbor view, read-only village visit API.
+- Owner-only dashboard at /admin to view and suspend/re-enable player accounts;
+  the initial admin role is granted offline with server_operator.py.
+- Atomic game saves, offline database+village backups, save reload tests.
+- Limited server-validated game commands: game status, map naming, buying,
+  selling without unverified refunds, moving, orientation and harvesting with
+  a provisional anti-abuse cooldown.
+- Rewritten Ruffle parameter object, removal of fake Facebook token and
+  restrictive Flash crossdomain.xml.
+
+This does **not** yet pass a full gameplay compatibility test and is not a
+public multiplayer release. See [local test setup](docs/LOCAL_SETUP.md) and
+[remaining launch blockers](docs/DEPLOYMENT_READINESS.md). In particular,
+quest rewards, PvP, full map physics, exact collection cooldowns, complete
+game commands, rights verification and a real two-device Flash session
+have **not** been completed. Do not expose the alpha over the Internet.
