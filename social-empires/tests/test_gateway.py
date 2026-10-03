@@ -30,6 +30,8 @@ class GatewayTests(unittest.TestCase):
             "REVIVAL_REQUIRE_HTTPS": "0",
             "REVIVAL_ALLOWED_HOSTS": "localhost,127.0.0.1",
             "REVIVAL_ALLOW_UNVALIDATED_COMMANDS": "",
+            "REVIVAL_ENABLE_SAFE_COMMANDS": "",
+            "REVIVAL_PUBLIC_ORIGIN": "",
         }
         old = {key: os.environ.get(key) for key in overrides}
         os.environ.update(overrides)
@@ -211,6 +213,21 @@ class GatewayTests(unittest.TestCase):
             "csrf": token, "username": "Alice", "password": "long-password-012345",
         }).status_code, 303)
         self.assertEqual(later.get("/play.html").data, b"village=village-1")
+
+    def test_public_origin_validation(self):
+        os.environ["REVIVAL_ALLOWED_HOSTS"] = "localhost,revival.example.com"
+        for origin in ("http://revival.example.com", "https://bad.example.com",
+                       "https://revival.example.com/dir",
+                       "https://revival.example.com@evil.example.com"):
+            os.environ["REVIVAL_PUBLIC_ORIGIN"] = origin
+            with self.subTest(origin=origin):
+                with self.assertRaises(RuntimeError):
+                    self.make_app()
+        os.environ["REVIVAL_PUBLIC_ORIGIN"] = "https://revival.example.com"
+        configured = self.make_app()
+        self.assertEqual(configured.test_client().get(
+            "/register", base_url="https://revival.example.com"
+        ).status_code, 200)
 
     def test_invalid_registration_and_weak_secret_fail_closed(self):
         self.assertEqual(self.register(self.client, "x").status_code, 400)
