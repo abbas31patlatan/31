@@ -121,7 +121,7 @@ class GatewayTests(unittest.TestCase):
     def test_game_commands_are_gated_by_default(self):
         self.register(self.client, "Alice")
         endpoint = GAME_PATH + "/command.php"
-        self.assertEqual(self.client.post(endpoint, data={"USERID": "village-1"}).status_code, 503)
+        self.assertEqual(self.client.post(endpoint, data={"USERID": "village-1", "user_key": self.game_key(self.client)}).status_code, 503)
         self.assertEqual(self.client.post(endpoint, data={"USERID": "village-2"}).status_code, 403)
 
     def test_signin_signout_csrf_and_duplicate_names(self):
