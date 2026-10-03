@@ -22,7 +22,7 @@ def replace_exact(source: str, old: str, new: str, count: int, label: str) -> st
 
 def patch_sources(target: Path, gateway: Path) -> dict:
     source_paths = (
-        "server.py", "sessions.py", "command.py",
+        "server.py", "sessions.py", "command.py", "get_player_info.py",
         "templates/play.html", "templates/ruffle.html",
     )
     target = target.resolve()
@@ -75,6 +75,7 @@ def patch_sources(target: Path, gateway: Path) -> dict:
         if occurrences < 3:
             raise PatchError(f"{template}: expected >=3 localhost URL references; found {occurrences}")
         s = s.replace("http://{{SERVERIP}}:5050", "{{SERVER_ORIGIN}}")
+        s = replace_exact(s, "user_key=123456789", "user_key={{revival_game_key}}", 1, f"{template} signed session key")
         s = replace_exact(s, '(<a href="/">logout</a>)', logout, 1, f"{template} logout")
         patched[template] = s
 
@@ -106,6 +107,28 @@ def patch_sources(target: Path, gateway: Path) -> dict:
                              2, "neighbor copy")
     patched["sessions.py"] = sessions
 
+    # Neighbor visits are readable but may not disclose the other player's
+    # private state (quest data, game economy, timers and saved secrets).
+    neighbor = target / "get_player_info.py"
+    if not neighbor.is_file():
+        raise PatchError("Missing upstream get_player_info.py")
+    player_info = neighbor.read_text(encoding="utf-8")
+    player_info = replace_exact(
+        player_info,
+        '        "privateState": neighbor_session(userid)["privateState"],',
+        '        "privateState": {"strategy": neighbor_session(userid)["privateState"].get("strategy", 8)},',
+        1, "neighbor private state disclosure",
+    )
+    player_info = replace_exact(
+        player_info,
+        '    neighbor_info = {\n',
+        '    if neighbor_session(userid) is None or not isinstance(map_number, int) or map_number < 0 or map_number >= len(neighbor_session(userid)["maps"]):\n'
+        '        return {"result": "error", "message": "Neighbor not found"}, 404\n'
+        '    neighbor_info = {\n',
+        1, "unknown neighbor error",
+    )
+    patched["get_player_info.py"] = player_info
+
     command = patched["command.py"]
     command = replace_exact(
         command, "def command(USERID, data):", "def _unlocked_command(USERID, data):",
@@ -135,6 +158,10 @@ def patch_sources(target: Path, gateway: Path) -> dict:
     out = target / "_revival"
     out.mkdir(exist_ok=True)
     shutil.copy2(gateway, out / "revival_gateway.py")
+    safe_commands = gateway.parent / "revival_safe_commands.py"
+    if not safe_commands.is_file():
+        raise PatchError("Missing validated command module")
+    shutil.copy2(safe_commands, out / "revival_safe_commands.py")
     return {
         "patched_files": list(compiled_files),
         "gateway": "_revival/revival_gateway.py",
