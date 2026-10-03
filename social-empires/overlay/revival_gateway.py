@@ -5,6 +5,8 @@ validation is incomplete; multiplayer Internet deployment is intentionally gated
 """
 
 from datetime import timedelta
+import hashlib
+import time
 from html import escape
 import hmac
 import os
@@ -124,6 +126,11 @@ def _logged_in_account():
     return row
 
 
+def _game_key(village_id, account_id):
+    payload = f"{account_id}:{village_id}".encode("utf-8")
+    return hmac.new(_required_secret().encode("utf-8"), payload, hashlib.sha256).hexdigest()
+
+
 def install_revival(app, create_village):
     """Attach account routes to an existing Flask app before it is served.
 
@@ -147,7 +154,11 @@ def install_revival(app, create_village):
 
     @app.context_processor
     def revival_template_context():
-        return {"csrf_token": _csrf()}
+        row = _logged_in_account()
+        return {
+            "csrf_token": _csrf(),
+            "revival_game_key": _game_key(row["village_id"], row["account_id"]) if row else "",
+        }
 
     @app.before_request
     def protect_game():
@@ -169,11 +180,42 @@ def install_revival(app, create_village):
                 abort(403, description="Village identifier mismatch")
             if supplied_id is None and not path.endswith(("track_game_status.php",)):
                 abort(400, description="Missing village identifier")
+            # Bind the legacy game API to a signed in-game session.
+            if path.endswith(("/get_player_info.php", "/get_game_config.php",
+                              "/command.php", "/get_continent_ranking.php")):
+                provided = request.values.get("user_key", "")
+                correct = _game_key(row["village_id"], row["account_id"])
+                if not hmac.compare_digest(provided, correct):
+                    abort(403, description="Invalid game session key")
+
             if path.endswith("/command.php") and (
-                os.environ.get("REVIVAL_ALLOW_UNVALIDATED_COMMANDS") != "1"
+                os.environ.get("REVIVAL_ENABLE_SAFE_COMMANDS") != "1"
             ):
-                abort(503, description="Game command validation not completed")
+                abort(503, description="Validated commands not yet enabled")
         return None
+
+    if os.environ.get("REVIVAL_ENABLE_SAFE_COMMANDS") == "1":
+        if "command_response" not in app.view_functions:
+            raise RuntimeError("Unsupported upstream command endpoint")
+        from revival_safe_commands import execute, PacketRejected
+        from sessions import session as get_village_session
+        from bundle import SAVES_DIR
+        from get_game_config import get_item_from_id
+
+        def validated_command():
+            account = _logged_in_account()
+            if account is None:
+                abort(401)
+            try:
+                result = execute(
+                    account["village_id"], request.values.get("data"),
+                    get_village_session, get_item_from_id, SAVES_DIR, time.time,
+                )
+            except PacketRejected:
+                return {"result": "error", "message": "Command rejected"}, 400
+            return result, 200
+
+        app.view_functions["command_response"] = validated_command
 
     def old_landing():
         if request.method != "GET":
