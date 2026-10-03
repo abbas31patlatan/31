@@ -30,7 +30,7 @@ jobs:
         run: |
           mkdir -p upstream-source/templates
           SHA=f642e0bae5a341f48e73b58f2e6d33a8436992c1
-          for file in server.py sessions.py command.py templates/play.html templates/ruffle.html requirements.txt; do
+          for file in server.py sessions.py command.py get_player_info.py templates/play.html templates/ruffle.html requirements.txt; do
             curl --fail --silent --show-error --location --retry 3 \
               --output "upstream-source/$file" \
               "https://raw.githubusercontent.com/AcidCaos/socialemperors/$SHA/$file"
