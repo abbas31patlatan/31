@@ -74,6 +74,10 @@ class GatewayTests(unittest.TestCase):
         with client.session_transaction() as state:
             return state["revival_csrf"]
 
+    def game_key(self, client):
+        with client.session_transaction() as state:
+            return gateway._game_key(state["USERID"], state["revival_account_id"])
+
     def register(self, client, name, password="long-password-012345"):
         return client.post(
             "/register",
@@ -92,21 +96,26 @@ class GatewayTests(unittest.TestCase):
     def test_private_identity_enforced_on_game_api(self):
         self.register(self.client, "Alice")
         self.assertEqual(
-            self.client.post(GAME_PATH + "/get_player_info.php", data={"USERID": "village-1"}).status_code,
+            self.client.post(GAME_PATH + "/get_player_info.php", data={"USERID": "village-1", "user_key": self.game_key(self.client)}).status_code,
             200,
         )
         self.assertEqual(
-            self.client.post(GAME_PATH + "/get_player_info.php", data={"USERID": "village-2"}).status_code,
+            self.client.post(GAME_PATH + "/get_player_info.php", data={"USERID": "village-2", "user_key": self.game_key(self.client)}).status_code,
             403,
         )
         self.assertEqual(
-            self.client.post(GAME_PATH + "/get_player_info.php", data={}).status_code,
+            self.client.post(GAME_PATH + "/get_player_info.php", data={"user_key": self.game_key(self.client)}).status_code,
             400,
         )
         other = self.app.test_client()
         self.assertEqual(
             other.post(GAME_PATH + "/get_player_info.php", data={"USERID": "village-1"}).status_code,
             401,
+        )
+        self.assertEqual(
+            self.client.post(GAME_PATH + "/get_player_info.php",
+                             data={"USERID": "village-1", "user_key": "123456789"}).status_code,
+            403,
         )
 
     def test_game_commands_are_gated_by_default(self):
