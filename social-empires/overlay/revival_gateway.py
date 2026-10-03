@@ -244,7 +244,7 @@ def install_revival(app, create_village):
                 (username,),
             ).fetchone()
         if not row or not check_password_hash(row["password_hash"], password):
-            return _form("/signin", "Sign in", "Invalid credentials"), 401
+            return _form("/signin", "Sign in", "Invalid credentials", status=401)
         _activate(row["account_id"], row["village_id"])
         return redirect("/play.html", code=303)
 
