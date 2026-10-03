@@ -19,7 +19,7 @@ def run(source):
         os.environ["REVIVAL_DB"] = str(Path(t) / "accounts.sqlite3")
         os.environ["REVIVAL_REQUIRE_HTTPS"] = "0"
         os.environ["REVIVAL_ALLOWED_HOSTS"] = "localhost,127.0.0.1"
-        os.environ.pop("REVIVAL_ALLOW_UNVALIDATED_COMMANDS", None)
+        os.environ["REVIVAL_ENABLE_SAFE_COMMANDS"] = "1"
         os.chdir(source)
         sys.path.insert(0, str(source))
         import server
@@ -59,20 +59,56 @@ def run(source):
             "/dynamic.flash1.dev.socialpoint.es/appsfb/socialempiresdev/"
             "srvempires/get_player_info.php"
         )
-        base = {"user_key": "legacy", "language": "en", "client_id": "test"}
-        assert a.post(endpoint, data={**base, "USERID": alice}).status_code == 200
-        assert b.post(endpoint, data={**base, "USERID": bob}).status_code == 200
-        assert a.post(endpoint, data={**base, "USERID": bob}).status_code == 403
+        from _revival.revival_gateway import _game_key
+        with a.session_transaction() as sess:
+            key_a = _game_key(alice, sess["revival_account_id"])
+        with b.session_transaction() as sess:
+            key_b = _game_key(bob, sess["revival_account_id"])
+        base = {"language": "en", "client_id": "test"}
+        assert a.post(endpoint, data={**base, "USERID": alice, "user_key": key_a}).status_code == 200
+        assert b.post(endpoint, data={**base, "USERID": bob, "user_key": key_b}).status_code == 200
+        assert a.post(endpoint, data={**base, "USERID": bob, "user_key": key_a}).status_code == 403
+        assert a.post(endpoint, data={**base, "USERID": alice, "user_key": "123456789"}).status_code == 403
+
+        # Other players may be visited but not inspect their private state.
+        neighbor = a.post(endpoint, data={**base, "USERID": alice,
+                                          "user_key": key_a, "user": bob, "map": "0"})
+        assert neighbor.status_code == 200, ("neighbor", neighbor.status_code)
+        other = neighbor.get_json()
+        assert other["playerInfo"]["pid"] == bob
+        assert "completedMissions" not in other["privateState"]
+        unknown = a.post(endpoint, data={**base, "USERID": alice,
+                                          "user_key": key_a, "user": "bad-neighbor", "map": "0"})
+        assert unknown.status_code == 404
 
         command = endpoint.replace("get_player_info.php", "command.php")
-        assert a.post(command, data={"USERID": alice}).status_code == 503
+        assert a.post(command, data={"USERID": alice, "user_key": key_a}).status_code == 400
+        packet = "a" * 64 + ";" + json.dumps({"commands": [
+            {"cmd": "name_map", "args": [0, "New Alpha Village"]},
+            {"cmd": "buy", "args": [1, 60, 60, 0, 0, 0, 1, 0]}
+        ]})
+        result = a.post(command, data={"USERID": alice, "user_key": key_a, "data": packet})
+        assert result.status_code == 200, ("command", result.status_code, result.data[:400])
+        # A repeat packet at the same location must be refused, not double-charge.
+        assert a.post(command, data={"USERID": alice, "user_key": key_a,
+                                     "data": packet}).status_code == 400
+        assert b.post(command, data={"USERID": alice, "user_key": key_b,
+                                     "data": packet}).status_code == 403
+        assert a.post(command, data={"USERID": alice, "user_key": key_a,
+                          "data": "a" * 64 + ";" + json.dumps({"commands": [
+                              {"cmd": "win_bonus", "args": [1000000, 0, 0, 0, 0]}
+                          ]})}).status_code == 400
+        from sessions import session as village_session
+        assert village_session(alice)["playerInfo"]["map_names"][0] == "New Alpha Village"
+        assert village_session(alice)["maps"][0]["wood"] < village_session(bob)["maps"][0]["wood"]
 
         # Save files are valid JSON and retain distinct player identifiers.
         for pid in (alice, bob):
             village = json.loads((source / "saves" / f"{pid}.save.json").read_text())
             assert village["playerInfo"]["pid"] == pid
         assert not list((source / "saves").glob(".village-*.tmp"))
-        print("PASS: real upstream imports, account pages, separate villages, game read, isolation and atomic saves")
+        assert not list((source / "saves").glob(".revival-*.tmp"))
+        print("PASS: real upstream imports, separate accounts, neighbor privacy, signed game APIs, validated purchases and saves")
 
 
 if __name__ == "__main__":
