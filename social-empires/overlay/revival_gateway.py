@@ -84,7 +84,7 @@ def _page(title, body, code=200):
     )
 
 
-def _form(action, label, error=""):
+def _form(action, label, error="", status=200):
     token = escape(_csrf(), quote=True)
     feedback = '<p class="error">' + escape(error) + '</p>' if error else ""
     return _page(
@@ -99,6 +99,7 @@ def _form(action, label, error=""):
         '<button type="submit">' + label + '</button></form>'
         + ('<a href="/signin">Sign in instead</a>' if action == "/register"
            else '<a href="/register">Create account</a>'),
+        code=status,
     )
 
 
@@ -196,14 +197,14 @@ def install_revival(app, create_village):
         username = _username(request.form.get("username"))
         password = request.form.get("password", "")
         if username is None or not 12 <= len(password) <= 128:
-            return _form("/register", "Create account", "Invalid username or password"), 400
+            return _form("/register", "Create account", "Invalid username or password", status=400)
         with _REGISTRATION_LOCK:
             with _connect() as db:
                 exists = db.execute(
                     "SELECT 1 FROM accounts WHERE username=?", (username,)
                 ).fetchone()
                 if exists:
-                    return _form("/register", "Create account", "Username unavailable"), 409
+                    return _form("/register", "Create account", "Username unavailable", status=409)
                 # Password hashing and a new independent village are only created
                 # after the duplicate-name check. Single-worker alpha deployment
                 # is mandatory while upstream's save store remains in memory.
@@ -236,7 +237,7 @@ def install_revival(app, create_village):
         username = _username(request.form.get("username"))
         password = request.form.get("password", "")
         if username is None or not password or len(password) > 128:
-            return _form("/signin", "Sign in", "Invalid credentials"), 401
+            return _form("/signin", "Sign in", "Invalid credentials", status=401)
         with _connect() as db:
             row = db.execute(
                 "SELECT account_id, village_id, password_hash FROM accounts WHERE username=?",
