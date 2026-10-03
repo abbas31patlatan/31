@@ -61,7 +61,6 @@ def run(source):
         assert ruffle.status_code == 200, ("ruffle", ruffle.status_code)
         assert b"parameters: {" in ruffle.data
         assert b"friendsInfo:" in ruffle.data
-        assert b"accessToken: \\"revival-not-facebook\\"" not in ruffle.data or b"AAABbZ" not in ruffle.data
         assert b"AAABbZ" not in ruffle.data
         policy = a.get("/crossdomain.xml")
         assert policy.status_code == 200
