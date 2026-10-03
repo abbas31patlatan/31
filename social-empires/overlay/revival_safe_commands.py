@@ -18,7 +18,7 @@ from pathlib import Path
 
 _COMMAND_LOCK = threading.RLock()
 _PACKET = re.compile(r"^[a-fA-F0-9]{64};", re.ASCII)
-_ALLOWED = frozenset({"game_status", "name_map", "move", "orient", "buy", "sell"})
+_ALLOWED = frozenset({"game_status", "name_map", "move", "orient", "buy", "sell", "collect_new"})
 _RESOURCE_KEYS = {"w": "wood", "s": "stone", "f": "food", "g": "coins", "c": "cash"}
 
 
@@ -107,6 +107,32 @@ def _apply_sell(save, args, item_lookup):
     # No refund until sale prices and discounts are known and verified.
 
 
+def _apply_collect(save, args, item_lookup, now):
+    if len(args) != 7:
+        raise PacketRejected("Invalid collection arguments")
+    x, y = _position(args)
+    game_map, _ = _map(save, args[2])
+    item_id = _integer(args[3], "collected item", maximum=1000000)
+    _integer(args[4], "contained units", maximum=100000)
+    # Never trust client-supplied resource multipliers or paid fast-forward.
+    if args[5] != 1 or args[6] != 0:
+        raise PacketRejected("Untrusted harvest modifier")
+    entity = _existing_item(game_map, item_id, x, y)
+    attributes = item_lookup(item_id)
+    if not isinstance(attributes, dict):
+        raise PacketRejected("Unknown harvested item")
+    resource = _RESOURCE_KEYS.get(attributes.get("collect_type"))
+    if not resource or resource == "cash":
+        raise PacketRejected("This resource type cannot be farmed")
+    amount = _integer(attributes.get("collect"), "harvest quantity", minimum=1, maximum=100000)
+    xp = _integer(attributes.get("collect_xp") or 0, "harvest XP", maximum=100000)
+    if now - _integer(entity[4], "last collected", maximum=3000000000) < 300:
+        raise PacketRejected("Harvest cooldown has not elapsed")
+    game_map[resource] += amount
+    game_map["xp"] += xp
+    entity[4] = now
+
+
 def _apply_move(save, args):
     if len(args) != 8:
         raise PacketRejected("Invalid move arguments")
@@ -148,6 +174,8 @@ def _apply_command(save, cmd, args, item_lookup, now):
         save["playerInfo"]["map_names"][index] = args[1]
     elif cmd == "move":
         _apply_move(save, args)
+    elif cmd == "collect_new":
+        _apply_collect(save, args, item_lookup, now)
     elif cmd == "orient":
         _apply_orient(save, args)
     elif cmd == "buy":
