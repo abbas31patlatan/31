@@ -74,7 +74,7 @@ jobs:
           import json
           data = json.load(open("upstream-game/config/game_config_20120826.json"))
           for id in [1, 5, 19, 26, 512]:
-              item = next((x for x in data["items"] if x.get("id") == id), None)
+              item = next((x for x in data["items"] if str(x.get("id")) == str(id)), None)
               if item is not None:
                   interesting = {
                       k: v for k, v in item.items()
