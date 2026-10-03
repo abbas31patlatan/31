@@ -124,6 +124,57 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(self.client.post(endpoint, data={"USERID": "village-1", "user_key": self.game_key(self.client)}).status_code, 503)
         self.assertEqual(self.client.post(endpoint, data={"USERID": "village-2"}).status_code, 403)
 
+    def test_admin_access_suspension_and_existing_cookie_revocation(self):
+        self.assertEqual(self.register(self.client, "Alice").status_code, 303)
+        self.assertEqual(self.client.get("/admin").status_code, 403)
+        bob = self.app.test_client()
+        self.assertEqual(self.register(bob, "Bob").status_code, 303)
+        with gateway._connect() as db:
+            db.execute("UPDATE accounts SET is_admin=1 WHERE username='alice'")
+        panel = self.client.get("/admin")
+        self.assertEqual(panel.status_code, 200)
+        self.assertIn(b"bob", panel.data)
+        self.assertEqual(bob.get("/admin").status_code, 403)
+        with gateway._connect() as db:
+            bob_id = db.execute(
+                "SELECT account_id FROM accounts WHERE username='bob'"
+            ).fetchone()[0]
+        token = self.token(self.client, "/admin")
+        self.assertEqual(
+            self.client.post("/admin/account-state", data={
+                "csrf": token, "account_id": bob_id, "disabled": "1"
+            }).status_code, 303
+        )
+        self.assertEqual(bob.get("/play.html").status_code, 302)
+        token_bob = self.token(bob, "/signin")
+        self.assertEqual(
+            bob.post("/signin", data={
+                "csrf": token_bob, "username": "Bob",
+                "password": "long-password-012345"
+            }).status_code, 401
+        )
+        self.assertEqual(
+            bob.post("/admin/account-state", data={
+                "csrf": token_bob, "account_id": 1, "disabled": "1"
+            }).status_code, 403
+        )
+        self.assertEqual(
+            self.client.post("/admin/account-state", data={
+                "csrf": token, "account_id": 1, "disabled": "1"
+            }).status_code, 400
+        )
+        self.assertEqual(
+            self.client.post("/admin/account-state", data={
+                "csrf": token, "account_id": bob_id, "disabled": "0"
+            }).status_code, 303
+        )
+        self.assertEqual(
+            bob.post("/signin", data={
+                "csrf": self.token(bob, "/signin"), "username": "Bob",
+                "password": "long-password-012345"
+            }).status_code, 303
+        )
+
     def test_signin_signout_csrf_and_duplicate_names(self):
         self.assertEqual(
             self.client.post("/register", data={"username": "Alice", "password": "a" * 12}).status_code,
