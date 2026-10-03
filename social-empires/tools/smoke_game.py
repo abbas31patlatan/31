@@ -85,7 +85,8 @@ def run(source):
         assert a.post(command, data={"USERID": alice, "user_key": key_a}).status_code == 400
         packet = "a" * 64 + ";" + json.dumps({"commands": [
             {"cmd": "name_map", "args": [0, "New Alpha Village"]},
-            {"cmd": "buy", "args": [1, 60, 60, 0, 0, 0, 1, 0]}
+            {"cmd": "buy", "args": [1, 60, 60, 0, 0, 0, 1, 0]},
+            {"cmd": "collect_new", "args": [50, 58, 0, 19, 0, 1, 0]}
         ]})
         result = a.post(command, data={"USERID": alice, "user_key": key_a, "data": packet})
         assert result.status_code == 200, ("command", result.status_code, result.data[:400])
