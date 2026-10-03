@@ -15,6 +15,7 @@ import secrets
 import sqlite3
 import threading
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from flask import abort, g, redirect, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -143,6 +144,19 @@ def install_revival(app, create_village):
     admin endpoints are exposed or silently trusted.
     """
     app.secret_key = _required_secret()
+    origin = os.environ.get("REVIVAL_PUBLIC_ORIGIN")
+    if origin:
+        parsed = urlsplit(origin)
+        if (
+            parsed.scheme != "https" or not parsed.hostname
+            or parsed.path not in ("", "/") or parsed.query or parsed.fragment
+            or parsed.username or parsed.password or parsed.port not in (None, 443)
+            or origin.rstrip("/") != f"https://{parsed.hostname}"
+        ):
+            raise RuntimeError("REVIVAL_PUBLIC_ORIGIN must be an HTTPS origin without a path")
+        allowed = set(os.environ.get("REVIVAL_ALLOWED_HOSTS", "").split(","))
+        if parsed.hostname not in allowed:
+            raise RuntimeError("Include REVIVAL_PUBLIC_ORIGIN hostname in REVIVAL_ALLOWED_HOSTS")
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
