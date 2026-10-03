@@ -40,10 +40,15 @@ use the corresponding PowerShell environment syntax on Windows):
     export REVIVAL_ALLOWED_HOSTS="localhost,127.0.0.1"
     export REVIVAL_DB="./revival-data/accounts.sqlite3"
 
-To test construction, harvesting and normal game commands **only on a
-trusted, local offline environment**:
+For a limited local gameplay test, enable only the **validated subset**
+(game status, map naming, simple purchase/sale, moving and orientation). Other
+commands, including harvesting, missions, attacks and client-provided rewards,
+are refused until their server-side rules are verified:
 
-    export REVIVAL_ALLOW_UNVALIDATED_COMMANDS=1
+    export REVIVAL_ENABLE_SAFE_COMMANDS=1
+
+The previous REVIVAL_ALLOW_UNVALIDATED_COMMANDS bypass no longer enables
+insecure game commands. This test remains restricted to localhost.
 
 Then launch, from the original game's working directory:
 
@@ -54,10 +59,11 @@ environment. A new account gets a distinct village. Sign in with an existing
 account at /signin. Existing villages are not automatically assigned to new
 accounts: no secure migration tool exists yet.
 
-Without REVIVAL_ALLOW_UNVALIDATED_COMMANDS, /command.php returns HTTP 503.
-This is deliberate; the upstream economic and combat commands are not
-server-authoritative. Do not use these insecure test settings through a
-Cloudflare tunnel or from an untrusted network.
+Without REVIVAL_ENABLE_SAFE_COMMANDS, /command.php returns HTTP 503.
+When enabled, only whitelisted operations are accepted; unsupported commands
+receive HTTP 400 without changing the village. The legacy game client may
+still issue blocked tutorial or farming commands, preventing full play.
+Do not put this alpha version behind a public Cloudflare tunnel.
 
 ## Data
 
@@ -96,3 +102,20 @@ checksums. The archive contains personal account data and password hashes;
 secure it privately and never commit or publish it. Restore is intentionally
 manual until a verified restore test is implemented. Admin role is stored
 but full in-game administration controls are still under development.
+
+## Verified limits of the alpha command layer
+
+- Each gameplay API call must include the signed user_key from its own game
+  page and the current account's USERID; hard-coded Facebook-style keys fail.
+- Validated batches copy the village, enforce server-side costs, and atomically
+  replace the save file before changing the in-memory village.
+- There is no proper multi-tile collision engine, cooldown economy, PvP battle
+  simulation or validated mission reward system yet. Movement currently uses a
+  strict own-item existence check, **not** server pathfinding.
+- The legacy hash prefix is recognized only as an envelope; it is not trusted
+  as a cryptographic signature. The actual session token is separate.
+- Simultaneous village/account creation and multi-process coordination remain
+  under development. Public gameplay remains disabled.
+
+Before public release, prove account abuse/rate limits, full command validation,
+gameplay timing/replay prevention and real Flash/Ruffle end-to-end behavior.
