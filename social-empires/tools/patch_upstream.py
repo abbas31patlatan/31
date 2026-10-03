@@ -47,6 +47,10 @@ def patch_sources(target: Path, gateway: Path) -> dict:
         2, "absolute server URL context",
     )
     server = replace_exact(
+        server, "return (get_neighbor_info(user, map), 200)",
+        "return get_neighbor_info(user, map)", 2, "neighbor response shape",
+    )
+    server = replace_exact(
         server, "    app.secret_key = 'SECRET_KEY'\n",
         "    # Secret is provided by revival gateway.\n",
         1, "hard-coded upstream cookie signing key",
