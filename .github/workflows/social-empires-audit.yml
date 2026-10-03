@@ -1,0 +1,26 @@
+name: Social Empires audit tool tests
+
+on:
+  push:
+    branches: [social-empires-revival]
+    paths:
+      - "social-empires/**"
+      - ".github/workflows/social-empires-audit.yml"
+  pull_request:
+    paths:
+      - "social-empires/**"
+      - ".github/workflows/social-empires-audit.yml"
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run source audit unit tests
+        run: python -m unittest discover -s social-empires/tests -v
