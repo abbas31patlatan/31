@@ -78,3 +78,21 @@ proxy headers, runtime compatibility, and explicit rights for all assets.
 
 REVIVAL_REQUIRE_HTTPS=1 and explicit REVIVAL_ALLOWED_HOSTS are needed for
 HTTPS deployment, but setting those alone does **not** pass the gates.
+
+## Offline operator controls
+
+Create the owner's normal account via /register, then grant it the admin flag
+from the hosting computer. This is deliberately NOT a public admin panel:
+
+    python social-empires/tools/operator.py --db /path/to/accounts.sqlite3 grant-admin --username ownername
+
+Stop the running game server before taking a complete backup. The command
+requires explicit confirmation that the process is stopped:
+
+    python social-empires/tools/operator.py --db /path/to/accounts.sqlite3 backup --saves /path/to/saves --output /safe/path/revival-2026.zip --server-stopped
+
+This produces a local ZIP with an SQLite backup, matching village saves and
+checksums. The archive contains personal account data and password hashes;
+secure it privately and never commit or publish it. Restore is intentionally
+manual until a verified restore test is implemented. Admin role is stored
+but full in-game administration controls are still under development.
