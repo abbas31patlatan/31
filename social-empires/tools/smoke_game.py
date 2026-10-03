@@ -108,6 +108,11 @@ def run(source):
             assert village["playerInfo"]["pid"] == pid
         assert not list((source / "saves").glob(".village-*.tmp"))
         assert not list((source / "saves").glob(".revival-*.tmp"))
+        # Emulate an application restart's persisted-village reload.
+        from sessions import load_saved_villages, session as current_village
+        load_saved_villages()
+        assert current_village(alice)["playerInfo"]["map_names"][0] == "New Alpha Village"
+        assert current_village(bob)["playerInfo"]["map_names"][0] == "My Empire"
         print("PASS: real upstream imports, separate accounts, neighbor privacy, signed game APIs, validated purchases and saves")
 
 
