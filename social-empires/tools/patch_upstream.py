@@ -43,7 +43,7 @@ def patch_sources(target: Path, gateway: Path) -> dict:
         "", 1, "removed Flask helper",  # unused older Flask private import
     )
     server = replace_exact(
-        server, "SERVERIP=host", 'SERVER_ORIGIN=request.host_url.rstrip("/")',
+        server, "SERVERIP=host", 'SERVER_ORIGIN=os.environ.get("REVIVAL_PUBLIC_ORIGIN") or request.host_url.rstrip("/")',
         2, "absolute server URL context",
     )
     server = replace_exact(
