@@ -1,0 +1,13 @@
+# Never commit personal account data, village saves, Flash archives or secrets.
+.env
+.env.*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+revival-data/
+saves/
+assets/
+*.swf
+*.zip
+__pycache__/
+*.pyc
