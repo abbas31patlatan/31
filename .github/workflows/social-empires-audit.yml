@@ -28,9 +28,9 @@ jobs:
         run: python -m unittest discover -s social-empires/tests -v
       - name: Download fixed upstream source snapshot (text only)
         run: |
-          mkdir -p upstream-source/templates
+          mkdir -p upstream-source/templates upstream-source/stub
           SHA=f642e0bae5a341f48e73b58f2e6d33a8436992c1
-          for file in server.py sessions.py command.py get_player_info.py templates/play.html templates/ruffle.html requirements.txt; do
+          for file in server.py sessions.py command.py get_player_info.py stub/crossdomain.xml templates/play.html templates/ruffle.html requirements.txt; do
             curl --fail --silent --show-error --location --retry 3 \
               --output "upstream-source/$file" \
               "https://raw.githubusercontent.com/AcidCaos/socialemperors/$SHA/$file"
