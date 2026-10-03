@@ -23,6 +23,7 @@ def replace_exact(source: str, old: str, new: str, count: int, label: str) -> st
 def patch_sources(target: Path, gateway: Path) -> dict:
     source_paths = (
         "server.py", "sessions.py", "command.py", "get_player_info.py",
+        "stub/crossdomain.xml",
         "templates/play.html", "templates/ruffle.html",
     )
     target = target.resolve()
@@ -66,6 +67,12 @@ def patch_sources(target: Path, gateway: Path) -> dict:
         "\nif __name__ == '__main__':",
         1, "gateway installation",
     )
+    server = replace_exact(
+        server,
+        'return render_template("ruffle.html", save_info=save_info(USERID),',
+        'return render_template("ruffle.html", friendsInfo=fb_friends_str(USERID), save_info=save_info(USERID),',
+        1, "Ruffle friend data",
+    )
     patched["server.py"] = server
 
     logout = (
@@ -81,6 +88,39 @@ def patch_sources(target: Path, gateway: Path) -> dict:
         s = s.replace("http://{{SERVERIP}}:5050", "{{SERVER_ORIGIN}}")
         s = replace_exact(s, "user_key=123456789", "user_key={{revival_game_key}}", 1, f"{template} signed session key")
         s = replace_exact(s, '(<a href="/">logout</a>)', logout, 1, f"{template} logout")
+        if template == "templates/ruffle.html":
+            # Upstream sends a concatenated escaped string, including a malformed
+            # friendsInfo field, not the parameter object expected by Ruffle.
+            start = s.find("                parameters: '")
+            end = s.find("\n                });", start)
+            if start < 0 or end < start:
+                raise PatchError("Unknown Ruffle player.load parameters layout")
+            params = (
+                '                parameters: {\n'
+                '                    spdebug: "notnull",\n'
+                '                    staticUrl: "{{SERVER_ORIGIN}}/default01.static.socialpointgames.com/static/socialempires/",\n'
+                '                    dynamicUrl: "{{SERVER_ORIGIN}}/dynamic.flash1.dev.socialpoint.es/appsfb/socialempiresdev/srvempires/",\n'
+                '                    fb_sig_user: {{save_info.userid|tojson}},\n'
+                '                    user_key: {{revival_game_key|tojson}},\n'
+                '                    language: "en",\n'
+                '                    accessToken: "revival-not-facebook",\n'
+                '                    friendsInfo: {{friendsInfo|tojson|tojson}},\n'
+                '                    serverTime: {{serverTime|tojson}},\n'
+                '                    forceSyncError: "1",\n'
+                '                    forceAttackReload: "0",\n'
+                '                    forceQuestReload: "0"\n'
+                '                }'
+            )
+            s = s[:start] + params + s[end:]
+        else:
+            # Remove the historical Facebook-looking dummy token; it is not a
+            # valid credential and cannot authorize gameplay on our server.
+            s = replace_exact(
+                s,
+                "accessToken=AAABbZAm0wdMUBALsOrR0Ho68CLjaOT8SV3vftKg9mbo1zZColaW5FljRVaLxPGxXXnm1M98mTZCAttcQ4GHwvSyXfsyxYmvKMH8Hmn5iliSPnjvIsZA6",
+                "accessToken=revival-not-facebook",
+                1, "remove dummy Facebook access token",
+            )
         patched[template] = s
 
     # A complete JSON replacement avoids truncated/corrupted village files on
@@ -110,6 +150,17 @@ def patch_sources(target: Path, gateway: Path) -> dict:
                              '        neigh = copy.deepcopy(vill["playerInfo"])',
                              2, "neighbor copy")
     patched["sessions.py"] = sessions
+
+    # Never permit a wildcard Flash policy on the protected account server.
+    policy = patched["stub/crossdomain.xml"]
+    if 'domain="*"' not in policy:
+        raise PatchError("Unexpected Flash cross-domain policy")
+    patched["stub/crossdomain.xml"] = (
+        '<?xml version="1.0"?>\n'
+        '<cross-domain-policy>\n'
+        '  <site-control permitted-cross-domain-policies="none"/>\n'
+        '</cross-domain-policy>\n'
+    )
 
     # Neighbor visits are readable but may not disclose the other player's
     # private state (quest data, game economy, timers and saved secrets).
