@@ -68,6 +68,21 @@ jobs:
           git -C upstream-game -c protocol.version=2 fetch --depth=1 --filter=blob:none origin f642e0bae5a341f48e73b58f2e6d33a8436992c1
           git -C upstream-game checkout --detach FETCH_HEAD
           test "$(git -C upstream-game rev-parse HEAD)" = "f642e0bae5a341f48e73b58f2e6d33a8436992c1"
+      - name: Inspect original item economy metadata
+        run: |
+          python - <<'PY'
+          import json
+          data = json.load(open("upstream-game/config/game_config_20120826.json"))
+          for id in [1, 5, 19, 26, 512]:
+              item = next((x for x in data["items"] if x.get("id") == id), None)
+              if item is not None:
+                  interesting = {
+                      k: v for k, v in item.items()
+                      if any(term in k.lower() for term in
+                             ("collect", "cost", "time", "xp", "cat", "produce"))
+                  }
+                  print("ITEM", id, interesting)
+          PY
       - name: Test patched real game server against two independent accounts
         run: |
           python -m pip install -r upstream-game/requirements.txt
