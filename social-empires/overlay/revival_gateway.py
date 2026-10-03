@@ -54,8 +54,13 @@ def _init_db():
             password_hash TEXT NOT NULL,
             village_id TEXT NOT NULL UNIQUE,
             is_admin INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            disabled_at TEXT DEFAULT NULL
         )""")
+        # Upgrade databases created before disabled_at existed.
+        columns = {row["name"] for row in db.execute("PRAGMA table_info(accounts)")}
+        if "disabled_at" not in columns:
+            db.execute("ALTER TABLE accounts ADD COLUMN disabled_at TEXT DEFAULT NULL")
 
 
 def _csrf():
@@ -118,10 +123,10 @@ def _logged_in_account():
         return None
     with _connect() as db:
         row = db.execute(
-            "SELECT account_id, village_id, is_admin FROM accounts WHERE account_id = ?",
+            "SELECT account_id, village_id, is_admin, disabled_at FROM accounts WHERE account_id = ?",
             (account_id,),
         ).fetchone()
-    if row is None or not hmac.compare_digest(row["village_id"], village_id):
+    if row is None or row["disabled_at"] is not None or not hmac.compare_digest(row["village_id"], village_id):
         return None
     return row
 
@@ -282,10 +287,10 @@ def install_revival(app, create_village):
             return _form("/signin", "Sign in", "Invalid credentials", status=401)
         with _connect() as db:
             row = db.execute(
-                "SELECT account_id, village_id, password_hash FROM accounts WHERE username=?",
+                "SELECT account_id, village_id, password_hash, disabled_at FROM accounts WHERE username=?",
                 (username,),
             ).fetchone()
-        if not row or not check_password_hash(row["password_hash"], password):
+        if not row or row["disabled_at"] is not None or not check_password_hash(row["password_hash"], password):
             return _form("/signin", "Sign in", "Invalid credentials", status=401)
         _activate(row["account_id"], row["village_id"])
         return redirect("/play.html", code=303)
@@ -295,6 +300,73 @@ def install_revival(app, create_village):
         _check_csrf()
         session.clear()
         return redirect("/signin", code=303)
+
+    @app.route("/admin", methods=["GET"])
+    def revival_admin():
+        operator = _logged_in_account()
+        if operator is None or operator["is_admin"] != 1:
+            abort(403)
+        with _connect() as db:
+            rows = db.execute(
+                "SELECT account_id, username, village_id, is_admin, disabled_at "
+                "FROM accounts ORDER BY account_id DESC LIMIT 200"
+            ).fetchall()
+            total = db.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
+        csrf = escape(_csrf(), quote=True)
+        cells = []
+        for row in rows:
+            # Admins may not disable themselves. No public administration
+            # endpoint is exposed until the owner explicitly grants admin.
+            can_change = row["account_id"] != operator["account_id"]
+            disabled = row["disabled_at"] is not None
+            control = ""
+            if can_change:
+                new_disabled = "0" if disabled else "1"
+                action = "Enable" if disabled else "Disable"
+                control = (
+                    '<form method="post" action="/admin/account-state">'
+                    '<input type="hidden" name="csrf" value="' + csrf + '">'
+                    '<input type="hidden" name="account_id" value="' + str(row["account_id"]) + '">'
+                    '<input type="hidden" name="disabled" value="' + new_disabled + '">'
+                    '<button type="submit">' + action + '</button></form>'
+                )
+            cells.append(
+                "<tr><td>" + escape(row["username"]) + "</td><td>" +
+                escape(row["village_id"]) + "</td><td>" +
+                ("Disabled" if disabled else "Active") + "</td><td>" + control + "</td></tr>"
+            )
+        body = (
+            "<p>Accounts: " + str(total) + " (showing most recent 200). "
+            "Administrative backups remain offline-only.</p>"
+            '<table><tr><th>Player</th><th>Village</th><th>Status</th><th>Action</th></tr>' +
+            "".join(cells) + "</table>"
+        )
+        return _page("Admin", body)
+
+    @app.route("/admin/account-state", methods=["POST"])
+    def revival_account_state():
+        operator = _logged_in_account()
+        if operator is None or operator["is_admin"] != 1:
+            abort(403)
+        _check_csrf()
+        try:
+            account_id = int(request.form["account_id"])
+        except (ValueError, KeyError, TypeError):
+            abort(400)
+        disabled = request.form.get("disabled")
+        if disabled not in ("0", "1") or account_id == operator["account_id"]:
+            abort(400)
+        with _connect() as db:
+            row = db.execute("SELECT is_admin FROM accounts WHERE account_id=?", (account_id,)).fetchone()
+            if row is None or row["is_admin"]:
+                # Admins can be managed from the host machine only.
+                abort(403)
+            db.execute(
+                "UPDATE accounts SET disabled_at=CASE WHEN ?='1' "
+                "THEN CURRENT_TIMESTAMP ELSE NULL END WHERE account_id=?",
+                (disabled, account_id),
+            )
+        return redirect("/admin", code=303)
 
     @app.route("/healthz", methods=["GET"])
     def revival_health():
