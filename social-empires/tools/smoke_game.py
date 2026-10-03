@@ -49,8 +49,11 @@ def run(source):
         assert alice in all_saves_userid() and bob in all_saves_userid()
         assert a.get("/play.html").status_code == 200
         assert b.get("/play.html").status_code == 200
-        assert alice.encode() in a.get("/play.html").data
-        assert bob.encode() not in a.get("/play.html").data
+        # Neighbor IDs are deliberately included in friendsInfo.
+        # Only the signed-in identity (fb_sig_user) must stay separate.
+        assert b"fb_sig_user=" + alice.encode() in a.get("/play.html").data
+        assert b"fb_sig_user=" + bob.encode() not in a.get("/play.html").data
+        assert b"fb_sig_user=" + bob.encode() in b.get("/play.html").data
 
         endpoint = (
             "/dynamic.flash1.dev.socialpoint.es/appsfb/socialempiresdev/"
