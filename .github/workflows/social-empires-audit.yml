@@ -59,6 +59,20 @@ jobs:
               assert 'action="/signout"' in t
           print("Pinned upstream integration: PASS")
           PY
+      - name: Fetch upstream source/config fixture (sparse)
+        run: |
+          git init upstream-game
+          git -C upstream-game remote add origin https://github.com/AcidCaos/socialemperors.git
+          git -C upstream-game sparse-checkout init --cone
+          git -C upstream-game sparse-checkout set config villages templates stub
+          git -C upstream-game -c protocol.version=2 fetch --depth=1 --filter=blob:none origin f642e0bae5a341f48e73b58f2e6d33a8436992c1
+          git -C upstream-game checkout --detach FETCH_HEAD
+          test "$(git -C upstream-game rev-parse HEAD)" = "f642e0bae5a341f48e73b58f2e6d33a8436992c1"
+      - name: Test patched real game server against two independent accounts
+        run: |
+          python -m pip install -r upstream-game/requirements.txt
+          python social-empires/tools/patch_upstream.py --path upstream-game
+          python social-empires/tools/smoke_game.py --path upstream-game
       - name: Upload audit report
         uses: actions/upload-artifact@v4
         with:
