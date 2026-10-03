@@ -93,7 +93,8 @@ def snapshot(db_path: Path, saves_dir: Path, output: Path):
             prefix=".revival-archive-", suffix=".zip", dir=output.parent
         )
         try:
-            os.fchmod(handle, 0o600)
+            if hasattr(os, 'fchmod'):
+                os.fchmod(handle, 0o600)
             with os.fdopen(handle, "wb") as writer:
                 with zipfile.ZipFile(writer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
                     archive.write(db_copy, "accounts.sqlite3")
