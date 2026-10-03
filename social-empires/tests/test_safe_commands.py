@@ -33,6 +33,9 @@ def lookup(item_id):
         return {"cost": "40", "cost_type": "w", "xp": "5"}
     if item_id == 2:
         return {"cost": "10", "cost_type": "c", "xp": "2"}
+    if item_id == 19:
+        return {"cost": "0", "cost_type": "g", "collect": "20",
+                "collect_type": "w", "collect_xp": "1"}
     return None
 
 
@@ -90,6 +93,25 @@ class GameCommandsTests(unittest.TestCase):
                 ("win_bonus", [9999999, 0, 0, 0, 0]),
             ), lookup, 1)
         self.assertEqual(original, game())
+
+    def test_harvesting_requires_owned_entity_and_server_cooldown(self):
+        original = game()
+        original["maps"][0]["items"].append([19, 52, 52, 0, 0, 0])
+        harvest = packet(("collect_new", [52, 52, 0, 19, 0, 1, 0]))
+        first = mod.apply_batch(original, harvest, lookup, 1000)
+        self.assertEqual(first["maps"][0]["wood"], 120)
+        self.assertEqual(first["maps"][0]["xp"], 1)
+        self.assertEqual(original["maps"][0]["wood"], 100)
+        for bad in (
+            packet(("collect_new", [52, 52, 0, 19, 0, 99999, 0])),
+            packet(("collect_new", [55, 55, 0, 19, 0, 1, 0])),
+        ):
+            with self.assertRaises(mod.PacketRejected):
+                mod.apply_batch(first, bad, lookup, 2000)
+        with self.assertRaises(mod.PacketRejected):
+            mod.apply_batch(first, harvest, lookup, 1010)
+        second = mod.apply_batch(first, harvest, lookup, 1300)
+        self.assertEqual(second["maps"][0]["wood"], 140)
 
     def test_bounded_packets_and_malformed_values(self):
         for value in ("no packet", "a"*64+";[]", "a"*64+";{}", "x"*64+";{}",
