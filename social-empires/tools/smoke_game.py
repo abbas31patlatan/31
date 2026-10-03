@@ -55,6 +55,19 @@ def run(source):
         assert b"fb_sig_user=" + bob.encode() not in a.get("/play.html").data
         assert b"fb_sig_user=" + bob.encode() in b.get("/play.html").data
 
+        # Game templates must not leak old Facebook-looking access tokens or
+        # emit malformed Ruffle string parameters.
+        ruffle = a.get("/ruffle.html")
+        assert ruffle.status_code == 200, ("ruffle", ruffle.status_code)
+        assert b"parameters: {" in ruffle.data
+        assert b"friendsInfo:" in ruffle.data
+        assert b"accessToken: \\"revival-not-facebook\\"" not in ruffle.data or b"AAABbZ" not in ruffle.data
+        assert b"AAABbZ" not in ruffle.data
+        policy = a.get("/crossdomain.xml")
+        assert policy.status_code == 200
+        assert b'permitted-cross-domain-policies="none"' in policy.data
+        assert b'domain="*"' not in policy.data
+
         endpoint = (
             "/dynamic.flash1.dev.socialpoint.es/appsfb/socialempiresdev/"
             "srvempires/get_player_info.php"
