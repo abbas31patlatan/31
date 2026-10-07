@@ -1,0 +1,49 @@
+name: Brawlhalla Depot Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/brawlhalla-depot-test.yml"
+
+jobs:
+  depot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download DepotDownloader
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -L --fail --retry 3 -o dd.zip "https://github.com/SteamRE/DepotDownloader/releases/download/DepotDownloader_3.4.0/DepotDownloader-linux-x64.zip"
+          mkdir -p dd
+          unzip -q dd.zip -d dd
+          chmod +x dd/DepotDownloader
+          dd/DepotDownloader --version
+
+      - name: Try anonymous Brawlhalla depot
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p brawlhalla
+          dd/DepotDownloader             -app 291550             -depot 291551             -manifest 252787301610705290             -dir "$GITHUB_WORKSPACE/brawlhalla"             -max-downloads 16             -validate | tee depot.log
+
+      - name: Inspect download
+        if: always()
+        shell: bash
+        run: |
+          echo "=== SIZE ==="
+          du -sh brawlhalla 2>/dev/null || true
+          echo "=== FILES ==="
+          find brawlhalla -maxdepth 2 -type f 2>/dev/null | head -50 || true
+          echo "=== LOG TAIL ==="
+          tail -80 depot.log 2>/dev/null || true
+
+      - name: Upload Brawlhalla artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: brawlhalla-windows-depot
+          path: brawlhalla/
+          compression-level: 0
+          retention-days: 1
