@@ -1,0 +1,113 @@
+name: Build Wine Graphics Probes
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/wine-graphics-test.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Build Windows OpenGL and D3D11 probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y mingw-w64
+          mkdir -p probes
+
+          cat > opengl_probe.c <<'EOF'
+          #include <windows.h>
+          #include <GL/gl.h>
+          #include <stdio.h>
+
+          int main(void) {
+              WNDCLASSA wc = {0};
+              wc.style = CS_OWNDC;
+              wc.lpfnWndProc = DefWindowProcA;
+              wc.hInstance = GetModuleHandleA(NULL);
+              wc.lpszClassName = "WineGLProbe";
+              if (!RegisterClassA(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+                  printf("OPENGL_FAIL RegisterClass %lu\n", GetLastError()); fflush(stdout); return 2;
+              }
+              HWND hwnd = CreateWindowA("WineGLProbe", "probe", WS_OVERLAPPEDWINDOW,
+                  0, 0, 320, 240, NULL, NULL, wc.hInstance, NULL);
+              if (!hwnd) { printf("OPENGL_FAIL CreateWindow %lu\n", GetLastError()); fflush(stdout); return 3; }
+              HDC dc = GetDC(hwnd);
+              PIXELFORMATDESCRIPTOR pfd = {0};
+              pfd.nSize = sizeof(pfd);
+              pfd.nVersion = 1;
+              pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
+              pfd.iPixelType = PFD_TYPE_RGBA;
+              pfd.cColorBits = 24;
+              pfd.cDepthBits = 24;
+              int pf = ChoosePixelFormat(dc, &pfd);
+              if (!pf || !SetPixelFormat(dc, pf, &pfd)) {
+                  printf("OPENGL_FAIL PixelFormat %lu\n", GetLastError()); fflush(stdout); return 4;
+              }
+              HGLRC rc = wglCreateContext(dc);
+              if (!rc || !wglMakeCurrent(dc, rc)) {
+                  printf("OPENGL_FAIL Context %lu\n", GetLastError()); fflush(stdout); return 5;
+              }
+              const char *vendor = (const char*)glGetString(GL_VENDOR);
+              const char *renderer = (const char*)glGetString(GL_RENDERER);
+              const char *version = (const char*)glGetString(GL_VERSION);
+              printf("OPENGL_OK\nVENDOR=%s\nRENDERER=%s\nVERSION=%s\n",
+                     vendor ? vendor : "(null)", renderer ? renderer : "(null)", version ? version : "(null)");
+              fflush(stdout);
+              wglMakeCurrent(NULL, NULL);
+              wglDeleteContext(rc);
+              ReleaseDC(hwnd, dc);
+              DestroyWindow(hwnd);
+              return 0;
+          }
+          EOF
+
+          cat > d3d11_probe.c <<'EOF'
+          #define COBJMACROS
+          #include <windows.h>
+          #include <d3d11.h>
+          #include <stdio.h>
+
+          int main(void) {
+              ID3D11Device *dev = NULL;
+              ID3D11DeviceContext *ctx = NULL;
+              D3D_FEATURE_LEVEL got = 0;
+              const D3D_FEATURE_LEVEL levels[] = {
+                  D3D_FEATURE_LEVEL_11_0,
+                  D3D_FEATURE_LEVEL_10_1,
+                  D3D_FEATURE_LEVEL_10_0,
+                  D3D_FEATURE_LEVEL_9_3
+              };
+              HRESULT hr = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, 0,
+                  levels, sizeof(levels)/sizeof(levels[0]), D3D11_SDK_VERSION,
+                  &dev, &got, &ctx);
+              printf("D3D11_HRESULT=0x%08lx\n", (unsigned long)hr);
+              if (SUCCEEDED(hr)) {
+                  printf("D3D11_OK FEATURE_LEVEL=0x%04x\n", (unsigned)got);
+                  if (ctx) ID3D11DeviceContext_Release(ctx);
+                  if (dev) ID3D11Device_Release(dev);
+                  fflush(stdout);
+                  return 0;
+              }
+              printf("D3D11_FAIL\n");
+              fflush(stdout);
+              return 1;
+          }
+          EOF
+
+          x86_64-w64-mingw32-gcc opengl_probe.c -O2 -s -o probes/opengl_probe.exe -lopengl32 -lgdi32 -luser32
+          x86_64-w64-mingw32-gcc d3d11_probe.c -O2 -s -o probes/d3d11_probe.exe -ld3d11 -ldxgi
+          file probes/*.exe
+          sha256sum probes/*.exe > probes/sha256sums.txt
+
+      - name: Upload probes
+        uses: actions/upload-artifact@v4
+        with:
+          name: wine-graphics-probes
+          path: probes/
+          compression-level: 0
+          retention-days: 1
