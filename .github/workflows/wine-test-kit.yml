@@ -1,0 +1,48 @@
+name: Build Portable Wine Test Kit
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/wine-test-kit.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Download portable Wine
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -L --fail --retry 3 -o wine.tar.xz             "https://github.com/Kron4ek/Wine-Builds/releases/download/11.19/wine-11.19-amd64-wow64.tar.xz"
+          mkdir -p kit/wine
+          tar -xJf wine.tar.xz --strip-components=1 -C kit/wine
+          kit/wine/bin/wine64 --version || kit/wine/bin/wine --version
+
+      - name: Build tiny Windows test application
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y mingw-w64
+          cat > hello.c <<'EOF'
+          #include <windows.h>
+          #include <stdio.h>
+          int main(void) {
+              printf("WINDOWS_EXE_OK\n");
+              MessageBoxA(NULL, "Wine is running inside the isolated Linux environment.", "Wine test", MB_OK);
+              return 0;
+          }
+          EOF
+          x86_64-w64-mingw32-gcc hello.c -O2 -s -mconsole -o kit/hello.exe -luser32
+          file kit/hello.exe
+          sha256sum kit/hello.exe > kit/hello.exe.sha256
+
+      - name: Package kit
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-wine-test-kit
+          path: kit/
+          compression-level: 0
+          retention-days: 1
