@@ -1,0 +1,36 @@
+name: Internet Speed Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/speedtest.yml"
+
+jobs:
+  speedtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download LibreSpeed CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -L --fail --retry 3 -o librespeed.tar.gz "https://github.com/librespeed/speedtest-cli/releases/download/v1.0.14/librespeed-cli_1.0.14_linux_amd64.tar.gz"
+          echo "89800767ac14085c78a20847ebea23340f6c14a78de0a15c2ac7db8b565c961f  librespeed.tar.gz" | sha256sum -c -
+          tar -xzf librespeed.tar.gz
+          chmod +x librespeed-cli
+          ./librespeed-cli --version
+
+      - name: Run LibreSpeed
+        shell: bash
+        run: |
+          set -o pipefail
+          ./librespeed-cli --json --no-icmp --duration 10 | tee speedtest-result.json
+
+      - name: Show human-readable result
+        if: always()
+        shell: bash
+        run: |
+          if [ -f speedtest-result.json ]; then
+            cat speedtest-result.json
+          fi
